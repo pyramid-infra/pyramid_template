@@ -1,0 +1,10 @@
+[package]
+name = "pyramid_template"
+version = "0.1.0"
+authors = ["Fredrik Noren <fredrik.jw.noren@gmail.com>"]
+
+[dependencies.pyramid]
+path = "../pyramid"
+
+[dependencies]
+xml-rs = "0.1.25"

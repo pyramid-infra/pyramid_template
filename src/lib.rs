@@ -1,8 +1,11 @@
-#![feature(convert)]
+#![feature(convert, core)]
 extern crate pyramid;
 extern crate xml;
 
 use std::collections::HashMap;
+use std::path::Path;
+use std::fs::File;
+use std::io::BufReader;
 
 use pyramid::interface::*;
 use pyramid::propnode::*;
@@ -22,9 +25,9 @@ struct Template {
 impl Template {
     fn from_string(string: &str) -> Template {
         let mut parser = EventReader::from_str(string);
-        Template::from_event_reader(parser.events())
+        Template::from_event_reader(&mut parser.events())
     }
-    fn from_event_reader<T: Iterator<Item=XmlEvent>>(mut event: T) -> Template {
+    fn from_event_reader<T: Iterator<Item=XmlEvent>>(mut event: &mut T) -> Template {
         let mut template_stack = vec![];
         while let Some(e) = event.next() {
             match e {
@@ -118,6 +121,18 @@ impl TemplateSubSystem {
             templates: HashMap::new()
         }
     }
+    fn load_templates_from_file(&mut self, path: &Path) {
+        let file = File::open(path).unwrap();
+        let file = BufReader::new(file);
+
+        let mut event_reader = EventReader::new(file);
+        let mut events = event_reader.events().peekable();
+        events.next(); // skip root
+        while !events.is_empty() {
+            let template = Template::from_event_reader(&mut events);
+            self.templates.insert(template.type_name.clone(), template);
+        }
+    }
     fn load_templates(&mut self, node: &PropNode) -> Result<(), PropTranslateErr> {
         let templates = try!(node.as_array());
         for pn in templates {
@@ -127,6 +142,10 @@ impl TemplateSubSystem {
                     let s = try!(p.arg.as_string());
                     let template = Template::from_string(s);
                     self.templates.insert(template.type_name.clone(), template);
+                }
+                "templates_from_file" => {
+                    let filename = try!(p.arg.as_string());
+                    self.load_templates_from_file(Path::new(filename));
                 }
                 _ => return Err(PropTranslateErr::UnrecognizedPropTransform(p.name.clone()))
             }

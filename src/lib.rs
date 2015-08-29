@@ -18,6 +18,7 @@ use xml::reader::events::*;
 #[derive(PartialEq, Debug, Clone)]
 struct Template {
     type_name: String,
+    inherits: Option<String>,
     properties: Vec<(String, PropNode)>,
     children: Vec<Template>
 }
@@ -32,13 +33,18 @@ impl Template {
         while let Some(e) = event.next() {
             match e {
                 XmlEvent::StartElement { name: type_name, attributes, .. } => {
-
+                    let inherits = match attributes.iter().find(|x| x.name.local_name == "inherits") {
+                        Some(attr) => Some(attr.value.to_string()),
+                        None => None
+                    };
                     let mut template = Template {
                         type_name: type_name.to_string(),
+                        inherits: inherits,
                         properties: vec![],
                         children: vec![]
                     };
                     for attribute in attributes {
+                        if (attribute.name.local_name == "inherits") { continue; }
                         match pyramid::propnode_parser::parse(&attribute.value) {
                             Ok(node) => template.properties.push((attribute.name.local_name.to_string(), node)),
                             Err(err) => panic!("Error parsing: {} error: {:?}", attribute.value, err)
@@ -68,13 +74,18 @@ impl Template {
         }
         panic!("Unbalanced template xml");
     }
-    fn apply(&self, system: &mut System, entity_id: &EntityId) {
+    fn apply(&self, templates: &HashMap<String, Template>, system: &mut System, entity_id: &EntityId) {
+        if let &Some(ref inherits) = &self.inherits {
+            if let Some(inherits_template) = templates.get(inherits) {
+                inherits_template.apply(templates, system, entity_id);
+            }
+        }
         for &(ref k, ref v) in &self.properties {
             system.set_property(entity_id, k.clone(), v.clone());
         }
         for ref template in &self.children {
             let e = system.append_entity(entity_id, template.type_name.clone(), None).unwrap();
-            template.apply(system, &e);
+            template.apply(templates, system, &e);
         }
     }
 }
@@ -85,10 +96,12 @@ fn test_template_from_string() {
     let template = Template::from_string(str);
     assert_eq!(template, Template {
         type_name: "Stone".to_string(),
+        inherits: None,
         properties: vec![("x".to_string(), PropNode::Integer(5))],
         children: vec![
             Template {
                 type_name: "Candle".to_string(),
+                inherits: None,
                 properties: vec![],
                 children: vec![]
             }
@@ -105,7 +118,7 @@ fn test_template_apply() {
 
     let mut system = pyramid::system::System::new();
     system.set_document(doc);
-    template.apply(&mut system, &ent);
+    template.apply(&HashMap::new(), &mut system, &ent);
 
     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
     assert_eq!(system.get_children(&ent).unwrap().len(), 1);
@@ -169,7 +182,7 @@ impl SubSystem for TemplateSubSystem {
         let type_name = system.get_entity_type_name(entity_id).unwrap().clone();
         match self.templates.get(&type_name) {
             Some(template) => {
-                template.apply(system, entity_id);
+                template.apply(&self.templates, system, entity_id);
             },
             None => {}
         }
@@ -188,4 +201,20 @@ fn test_template() {
     system.set_document(doc);
 
     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
+}
+
+#[test]
+fn test_template_inherits() {
+    let template1 = r#"<Rock x="5"/>"#;
+    let template2 = r#"<Granit inherits="Rock" y="2"/>"#;
+    let doc_src = format!(r#"<Root templates="[template '{}', template '{}']"><Granit name="tmp" /></Root>"#, xml::escape::escape_str(template1), xml::escape::escape_str(template2));
+    let doc = Document::from_string(doc_src.as_str());
+    let ent = doc.get_entity_by_name("tmp").unwrap();
+
+    let mut system = pyramid::system::System::new();
+    system.add_subsystem(Box::new(TemplateSubSystem::new()));
+    system.set_document(doc);
+
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
+    assert_eq!(system.get_property_value(&ent, "y"), Ok(PropNode::Integer(2)));
 }

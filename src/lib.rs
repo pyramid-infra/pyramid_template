@@ -2,6 +2,10 @@
 extern crate pyramid;
 extern crate xml;
 
+mod template;
+
+use template::*;
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -15,114 +19,6 @@ use pyramid::document::*;
 use xml::reader::EventReader;
 use xml::reader::Events;
 use xml::reader::events::*;
-
-#[derive(PartialEq, Debug, Clone)]
-struct Template {
-    type_name: String,
-    inherits: Option<String>,
-    properties: Vec<(String, PropNode)>,
-    children: Vec<Template>
-}
-
-impl Template {
-    fn from_string(string: &str) -> Result<Template, String> {
-        let mut parser = EventReader::from_str(string);
-        Template::from_event_reader(&mut parser.events())
-    }
-    fn from_event_reader<T: Iterator<Item=XmlEvent>>(mut event: &mut T) -> Result<Template, String> {
-        let mut template_stack = vec![];
-        while let Some(e) = event.next() {
-            match e {
-                XmlEvent::StartElement { name: type_name, attributes, .. } => {
-                    let inherits = match attributes.iter().find(|x| x.name.local_name == "inherits") {
-                        Some(attr) => Some(attr.value.to_string()),
-                        None => None
-                    };
-                    let mut template = Template {
-                        type_name: type_name.to_string(),
-                        inherits: inherits,
-                        properties: vec![],
-                        children: vec![]
-                    };
-                    for attribute in attributes {
-                        if (attribute.name.local_name == "inherits") { continue; }
-                        match pyramid::propnode_parser::parse(&attribute.value) {
-                            Ok(node) => template.properties.push((attribute.name.local_name.to_string(), node)),
-                            Err(err) => panic!("Error parsing: {} error: {:?}", attribute.value, err)
-                        };
-                    }
-                    template_stack.push(template);
-                }
-                XmlEvent::EndElement { name: type_name } => {
-                    match template_stack.pop() {
-                        Some(template) => {
-                            match template_stack.last_mut() {
-                                Some(ref mut parent) => {
-                                    parent.children.push(template);
-                                }
-                                None => return Ok(template)
-                            };
-                        }
-                        None => return Err("Unbalanced xml tree".to_string())
-                    }
-                }
-                XmlEvent::Error(e) => {
-                    return Err(format!("Xml error: {}", e));
-                }
-                _ => {}
-            }
-        }
-        Err("Unbalanced xml tree".to_string())
-    }
-    fn apply(&self, templates: &HashMap<String, Template>, system: &mut System, entity_id: &EntityId) {
-        if let &Some(ref inherits) = &self.inherits {
-            if let Some(inherits_template) = templates.get(inherits) {
-                inherits_template.apply(templates, system, entity_id);
-            }
-        }
-        for &(ref k, ref v) in &self.properties {
-            system.set_property(entity_id, k.clone(), v.clone());
-        }
-        for ref template in &self.children {
-            let e = system.append_entity(entity_id, template.type_name.clone(), None).unwrap();
-            template.apply(templates, system, &e);
-        }
-    }
-}
-
-#[test]
-fn test_template_from_string() {
-    let str = r#"<Stone x="5"><Candle /></Stone>"#;
-    let template = Template::from_string(str).unwrap();
-    assert_eq!(template, Template {
-        type_name: "Stone".to_string(),
-        inherits: None,
-        properties: vec![("x".to_string(), PropNode::Integer(5))],
-        children: vec![
-            Template {
-                type_name: "Candle".to_string(),
-                inherits: None,
-                properties: vec![],
-                children: vec![]
-            }
-        ]
-    })
-}
-
-#[test]
-fn test_template_apply() {
-    let str = r#"<Stone x="5"><Candle /></Stone>"#;
-    let template = Template::from_string(str).unwrap();
-    let doc = Document::from_string(r#"<Stone name="tmp" />"#);
-    let ent = doc.get_entity_by_name("tmp").unwrap();
-
-    let mut system = pyramid::system::System::new();
-    system.set_document(doc);
-    template.apply(&HashMap::new(), &mut system, &ent);
-
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
-    assert_eq!(system.get_children(&ent).unwrap().len(), 1);
-}
 
 pub struct TemplateSubSystem {
     root_path: PathBuf,
@@ -141,11 +37,24 @@ impl TemplateSubSystem {
         let file = BufReader::new(file);
 
         let mut event_reader = EventReader::new(file);
-        let mut events = event_reader.events().peekable();
-        events.next(); // skip root
-        while !events.is_empty() {
-            match Template::from_event_reader(&mut events) {
-                Ok(template) => { self.templates.insert(template.type_name.clone(), template); }
+        let mut events = event_reader.events();
+        let mut template_stack = vec![];
+        while let Some(e) = events.next() {
+            match e.clone() {
+                XmlEvent::StartElement { name, .. } => {
+                    if name.local_name.as_str() == "Tpml" {
+                        continue;
+                    }
+                }
+                XmlEvent::EndElement { name, .. } => {
+                    if name.local_name.as_str() == "Tpml" {
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+            match Template::parse_event(&mut template_stack, e) {
+                Some(template) => { self.templates.insert(template.type_name.clone(), template); }
                 _ => {}
             }
         }
@@ -182,6 +91,7 @@ impl SubSystem for TemplateSubSystem {
         for entity in entities {
             self.on_entity_added(system, &entity);
         }
+        println!("TEMPLATES {:?}", self.templates);
     }
     fn on_entity_added(&mut self, system: &mut System, entity_id: &EntityId) {
         let type_name = system.get_entity_type_name(entity_id).unwrap().clone();

@@ -73,7 +73,7 @@ impl Template {
         }
         None
     }
-    pub fn apply(&self, templates: &HashMap<String, Template>, system: &mut System, entity_id: &EntityId) {
+    pub fn apply(&self, templates: &HashMap<String, Template>, system: &mut ISystem, entity_id: &EntityId) {
         if let &Some(ref inherits) = &self.inherits {
             if let Some(inherits_template) = templates.get(inherits) {
                 inherits_template.apply(templates, system, entity_id);

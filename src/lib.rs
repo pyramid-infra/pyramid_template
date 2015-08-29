@@ -82,8 +82,8 @@ impl TemplateSubSystem {
 }
 
 
-impl SubSystem for TemplateSubSystem {
-    fn on_document_loaded(&mut self, system: &mut System) {
+impl ISubSystem for TemplateSubSystem {
+    fn on_document_loaded(&mut self, system: &mut ISystem) {
         let root = system.get_root().clone();
         let templates = system.get_property_value(&root, "templates").unwrap();
         self.load_templates(&templates);
@@ -93,7 +93,7 @@ impl SubSystem for TemplateSubSystem {
         }
         println!("TEMPLATES {:?}", self.templates);
     }
-    fn on_entity_added(&mut self, system: &mut System, entity_id: &EntityId) {
+    fn on_entity_added(&mut self, system: &mut ISystem, entity_id: &EntityId) {
         let type_name = system.get_entity_type_name(entity_id).unwrap().clone();
         match self.templates.get(&type_name) {
             Some(template) => {

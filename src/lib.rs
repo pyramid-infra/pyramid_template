@@ -85,13 +85,17 @@ impl TemplateSubSystem {
 impl ISubSystem for TemplateSubSystem {
     fn on_document_loaded(&mut self, system: &mut ISystem) {
         let root = system.get_root().clone();
-        let templates = system.get_property_value(&root, "templates").unwrap();
-        self.load_templates(&templates);
-        let entities: Vec<EntityId> = { system.get_entities().map(|x| x.clone()).collect() };
-        for entity in entities {
-            self.on_entity_added(system, &entity);
+        match system.get_property_value(&root, "templates") {
+            Ok(templates) => {
+                self.load_templates(&templates);
+                let entities: Vec<EntityId> = { system.get_entities().map(|x| x.clone()).collect() };
+                for entity in entities {
+                    self.on_entity_added(system, &entity);
+                }
+                println!("TEMPLATES {:?}", self.templates);
+            },
+            _ => {}
         }
-        println!("TEMPLATES {:?}", self.templates);
     }
     fn on_entity_added(&mut self, system: &mut ISystem, entity_id: &EntityId) {
         let type_name = system.get_entity_type_name(entity_id).unwrap().clone();

@@ -107,65 +107,66 @@ fn test_template_apply() {
     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
     assert_eq!(system.get_children(&ent).unwrap().len(), 1);
 }
-//
-// pub struct TemplateSubSystem {
-//     templates: HashMap<String, Template>
-// }
-//
-// impl TemplateSubSystem {
-//     pub fn new() -> TemplateSubSystem {
-//         TemplateSubSystem {
-//             templates: HashMap::new()
-//         }
-//     }
-//     fn load_templates(&mut self, node: &PropNode) -> Result<(), PropTranslateErr> {
-//         let p = try!(node.as_transform());
-//         if p.name != "templates" {
-//             return Err(PropTranslateErr::UnrecognizedPropTransform(p.name));
-//         }
-//         let templates = try!(p.arg.as_array());
-//         for pn in templates {
-//             let s = try!(pn.as_string());
-//             let template = Template::from_string(s);
-//             self.templates.insert(template.type_name, tempalte);
-//         }
-//     }
-//
-// }
-//
-//
-// impl SubSystem for TemplateSubSystem {
-//     fn on_document_loaded(&mut self, system: &mut System) {
-//         let root = system.get_root();
-//         let templates = system.get_property_value(root, "templates");
-//         self.load_templates(templates);
-//         for entity in system.get_entities() {
-//             self.on_entity_added(system, entity);
-//         }
-//     }
-//     fn on_entity_added(&mut self, system: &mut System, entity_id: &EntityId) {
-//         let type_name = system.get_entity_type_name(entity_id);
-//         match self.templates.get(type_name) {
-//             Some(tempalte) => {
-//                 self.apply_template(system, entity_id, template);
-//             },
-//             None => {}
-//         }
-//     }
-//     fn on_property_value_change(&mut self, system: &mut System, prop_refs: &Vec<PropRef>) {
-//     }
-//     fn update(&mut self, system: &mut System, delta_time: time::Duration) {
-//     }
-// }
-//
-// #[test]
-// fn test_template() {
-//     let doc = Document::from_string(r#"<Root templates="templates ['<Rock x=\"5\">']"><Rock name="tmp" /></Root>"#);
-//     let ent = doc.get_entity_by_name("tmp").unwrap();
-//
-//     let mut system = System::new();
-//     system.add_subsystem(Box::new(TemplateSubSystem::new()));
-//     system.set_document(doc);
-//
-//     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
-// }
+
+pub struct TemplateSubSystem {
+    templates: HashMap<String, Template>
+}
+
+impl TemplateSubSystem {
+    pub fn new() -> TemplateSubSystem {
+        TemplateSubSystem {
+            templates: HashMap::new()
+        }
+    }
+    fn load_templates(&mut self, node: &PropNode) -> Result<(), PropTranslateErr> {
+        let templates = try!(node.as_array());
+        for pn in templates {
+            let p = try!(pn.as_transform());
+            match p.name.as_str() {
+                "template" => {
+                    let s = try!(p.arg.as_string());
+                    let template = Template::from_string(s);
+                    self.templates.insert(template.type_name.clone(), template);
+                }
+                _ => return Err(PropTranslateErr::UnrecognizedPropTransform(p.name.clone()))
+            }
+        }
+        Ok(())
+    }
+}
+
+
+impl SubSystem for TemplateSubSystem {
+    fn on_document_loaded(&mut self, system: &mut System) {
+        let root = system.get_root().clone();
+        let templates = system.get_property_value(&root, "templates").unwrap();
+        self.load_templates(&templates);
+        let entities: Vec<EntityId> = { system.get_entities().map(|x| x.clone()).collect() };
+        for entity in entities {
+            self.on_entity_added(system, &entity);
+        }
+    }
+    fn on_entity_added(&mut self, system: &mut System, entity_id: &EntityId) {
+        let type_name = system.get_entity_type_name(entity_id).unwrap().clone();
+        match self.templates.get(&type_name) {
+            Some(template) => {
+                template.apply(system, entity_id);
+            },
+            None => {}
+        }
+    }
+}
+
+#[test]
+fn test_template() {
+    let template = r#"<Rock x="5"/>"#;
+    let doc_src = format!(r#"<Root templates="[template '{}']"><Rock name="tmp" /></Root>"#, xml::escape::escape_str(template));
+    let doc = Document::from_string(doc_src.as_str());
+    let ent = doc.get_entity_by_name("tmp").unwrap();
+
+    let mut system = pyramid::system::System::new();
+    system.add_subsystem(Box::new(TemplateSubSystem::new()));
+    system.set_document(doc);
+
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
+}

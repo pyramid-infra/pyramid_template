@@ -4,6 +4,7 @@ extern crate xml;
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -24,11 +25,11 @@ struct Template {
 }
 
 impl Template {
-    fn from_string(string: &str) -> Template {
+    fn from_string(string: &str) -> Result<Template, String> {
         let mut parser = EventReader::from_str(string);
         Template::from_event_reader(&mut parser.events())
     }
-    fn from_event_reader<T: Iterator<Item=XmlEvent>>(mut event: &mut T) -> Template {
+    fn from_event_reader<T: Iterator<Item=XmlEvent>>(mut event: &mut T) -> Result<Template, String> {
         let mut template_stack = vec![];
         while let Some(e) = event.next() {
             match e {
@@ -59,20 +60,19 @@ impl Template {
                                 Some(ref mut parent) => {
                                     parent.children.push(template);
                                 }
-                                None => return template
+                                None => return Ok(template)
                             };
                         }
-                        None => panic!("Unbalanced template xml")
+                        None => return Err("Unbalanced xml tree".to_string())
                     }
                 }
                 XmlEvent::Error(e) => {
-                    println!("Error: {}", e);
-                    break;
+                    return Err(format!("Xml error: {}", e));
                 }
                 _ => {}
             }
         }
-        panic!("Unbalanced template xml");
+        Err("Unbalanced xml tree".to_string())
     }
     fn apply(&self, templates: &HashMap<String, Template>, system: &mut System, entity_id: &EntityId) {
         if let &Some(ref inherits) = &self.inherits {
@@ -93,7 +93,7 @@ impl Template {
 #[test]
 fn test_template_from_string() {
     let str = r#"<Stone x="5"><Candle /></Stone>"#;
-    let template = Template::from_string(str);
+    let template = Template::from_string(str).unwrap();
     assert_eq!(template, Template {
         type_name: "Stone".to_string(),
         inherits: None,
@@ -112,7 +112,7 @@ fn test_template_from_string() {
 #[test]
 fn test_template_apply() {
     let str = r#"<Stone x="5"><Candle /></Stone>"#;
-    let template = Template::from_string(str);
+    let template = Template::from_string(str).unwrap();
     let doc = Document::from_string(r#"<Stone name="tmp" />"#);
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
@@ -125,12 +125,14 @@ fn test_template_apply() {
 }
 
 pub struct TemplateSubSystem {
+    root_path: PathBuf,
     templates: HashMap<String, Template>
 }
 
 impl TemplateSubSystem {
-    pub fn new() -> TemplateSubSystem {
+    pub fn new(root_path: PathBuf) -> TemplateSubSystem {
         TemplateSubSystem {
+            root_path: root_path,
             templates: HashMap::new()
         }
     }
@@ -142,8 +144,10 @@ impl TemplateSubSystem {
         let mut events = event_reader.events().peekable();
         events.next(); // skip root
         while !events.is_empty() {
-            let template = Template::from_event_reader(&mut events);
-            self.templates.insert(template.type_name.clone(), template);
+            match Template::from_event_reader(&mut events) {
+                Ok(template) => { self.templates.insert(template.type_name.clone(), template); }
+                _ => {}
+            }
         }
     }
     fn load_templates(&mut self, node: &PropNode) -> Result<(), PropTranslateErr> {
@@ -153,12 +157,13 @@ impl TemplateSubSystem {
             match p.name.as_str() {
                 "template" => {
                     let s = try!(p.arg.as_string());
-                    let template = Template::from_string(s);
+                    let template = Template::from_string(s).unwrap();
                     self.templates.insert(template.type_name.clone(), template);
                 }
                 "templates_from_file" => {
                     let filename = try!(p.arg.as_string());
-                    self.load_templates_from_file(Path::new(filename));
+                    let path = self.root_path.join(Path::new(filename));
+                    self.load_templates_from_file(&path);
                 }
                 _ => return Err(PropTranslateErr::UnrecognizedPropTransform(p.name.clone()))
             }
@@ -197,7 +202,7 @@ fn test_template() {
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
     let mut system = pyramid::system::System::new();
-    system.add_subsystem(Box::new(TemplateSubSystem::new()));
+    system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
@@ -212,7 +217,7 @@ fn test_template_inherits() {
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
     let mut system = pyramid::system::System::new();
-    system.add_subsystem(Box::new(TemplateSubSystem::new()));
+    system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
     assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));

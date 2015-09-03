@@ -63,18 +63,18 @@ impl TemplateSubSystem {
         let templates = try!(node.as_array());
         for pn in templates {
             let p = try!(pn.as_transform());
-            match p.name.as_str() {
+            match p.type_name.as_str() {
                 "template" => {
-                    let s = try!(p.arg.as_string());
+                    let s = try!(p.data.as_string());
                     let template = Template::from_string(s).unwrap();
                     self.templates.insert(template.type_name.clone(), template);
                 }
                 "templates_from_file" => {
-                    let filename = try!(p.arg.as_string());
+                    let filename = try!(p.data.as_string());
                     let path = self.root_path.join(Path::new(filename));
                     self.load_templates_from_file(&path);
                 }
-                _ => return Err(PropTranslateErr::UnrecognizedPropTransform(p.name.clone()))
+                _ => return Err(PropTranslateErr::UnrecognizedTypedPon(p.type_name.clone()))
             }
         }
         Ok(())

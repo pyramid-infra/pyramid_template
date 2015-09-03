@@ -59,7 +59,7 @@ impl TemplateSubSystem {
             }
         }
     }
-    fn load_templates(&mut self, node: &Pon) -> Result<(), PropTranslateErr> {
+    fn load_templates(&mut self, node: &Pon) -> Result<(), PonTranslateErr> {
         let templates = try!(node.as_array());
         for pn in templates {
             let p = try!(pn.as_transform());
@@ -74,7 +74,7 @@ impl TemplateSubSystem {
                     let path = self.root_path.join(Path::new(filename));
                     self.load_templates_from_file(&path);
                 }
-                _ => return Err(PropTranslateErr::UnrecognizedTypedPon(p.type_name.clone()))
+                _ => return Err(PonTranslateErr::UnrecognizedTypedPon(p.type_name.clone()))
             }
         }
         Ok(())

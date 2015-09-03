@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use pyramid::interface::*;
-use pyramid::propnode::*;
+use pyramid::pon::*;
 use pyramid::document::*;
 
 use xml::reader::EventReader;
@@ -59,7 +59,7 @@ impl TemplateSubSystem {
             }
         }
     }
-    fn load_templates(&mut self, node: &PropNode) -> Result<(), PropTranslateErr> {
+    fn load_templates(&mut self, node: &Pon) -> Result<(), PropTranslateErr> {
         let templates = try!(node.as_array());
         for pn in templates {
             let p = try!(pn.as_transform());
@@ -119,7 +119,7 @@ fn test_template() {
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
 }
 
 #[test]
@@ -134,6 +134,6 @@ fn test_template_inherits() {
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
-    assert_eq!(system.get_property_value(&ent, "y"), Ok(PropNode::Integer(2)));
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(system.get_property_value(&ent, "y"), Ok(Pon::Integer(2)));
 }

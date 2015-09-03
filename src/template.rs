@@ -2,7 +2,7 @@ extern crate pyramid;
 
 use std::collections::HashMap;
 
-use pyramid::propnode::*;
+use pyramid::pon::*;
 use pyramid::interface::*;
 use pyramid::document::*;
 
@@ -14,7 +14,7 @@ use xml::reader::events::*;
 pub struct Template {
     pub type_name: String,
     pub inherits: Option<String>,
-    pub properties: Vec<(String, PropNode)>,
+    pub properties: Vec<(String, Pon)>,
     pub children: Vec<Template>
 }
 
@@ -46,7 +46,7 @@ impl Template {
                 };
                 for attribute in attributes {
                     if (attribute.name.local_name == "inherits") { continue; }
-                    match pyramid::propnode_parser::parse(&attribute.value) {
+                    match pyramid::pon_parser::parse(&attribute.value) {
                         Ok(node) => template.properties.push((attribute.name.local_name.to_string(), node)),
                         Err(err) => panic!("Error parsing: {} error: {:?}", attribute.value, err)
                     };
@@ -100,7 +100,7 @@ fn test_template_from_string() {
     assert_eq!(template, Template {
         type_name: "Stone".to_string(),
         inherits: None,
-        properties: vec![("x".to_string(), PropNode::Integer(5))],
+        properties: vec![("x".to_string(), Pon::Integer(5))],
         children: vec![
             Template {
                 type_name: "Candle".to_string(),
@@ -123,7 +123,7 @@ fn test_template_apply() {
     system.set_document(doc);
     template.apply(&HashMap::new(), &mut system, &ent);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(5)));
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
     assert_eq!(system.get_children(&ent).unwrap().len(), 1);
 }
 
@@ -138,5 +138,5 @@ fn test_template_apply_dont_overwrite() {
     system.set_document(doc);
     template.apply(&HashMap::new(), &mut system, &ent);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(PropNode::Integer(7)));
+    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(7)));
 }

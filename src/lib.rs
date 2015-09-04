@@ -74,7 +74,7 @@ impl TemplateSubSystem {
                     let path = self.root_path.join(Path::new(filename));
                     self.load_templates_from_file(&path);
                 }
-                _ => return Err(PonTranslateErr::UnrecognizedTypedPon(p.type_name.clone()))
+                _ => return Err(PonTranslateErr::UnrecognizedType(p.type_name.clone()))
             }
         }
         Ok(())

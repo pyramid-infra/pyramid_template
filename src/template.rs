@@ -46,7 +46,7 @@ impl Template {
                 };
                 for attribute in attributes {
                     if (attribute.name.local_name == "inherits") { continue; }
-                    match pyramid::pon_parser::parse(&attribute.value) {
+                    match Pon::from_string(&attribute.value) {
                         Ok(node) => template.properties.push((attribute.name.local_name.to_string(), node)),
                         Err(err) => panic!("Error parsing: {} error: {:?}", attribute.value, err)
                     };

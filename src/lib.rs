@@ -60,17 +60,17 @@ impl TemplateSubSystem {
         }
     }
     fn load_templates(&mut self, node: &Pon) -> Result<(), PonTranslateErr> {
-        let templates = try!(node.as_array());
+        let templates = try!(node.translate::<&Vec<Pon>>());
         for pn in templates {
-            let p = try!(pn.as_transform());
+            let p = try!(pn.translate::<&TypedPon>());
             match p.type_name.as_str() {
                 "template" => {
-                    let s = try!(p.data.as_string());
+                    let s = try!(p.data.translate::<&str>());
                     let template = Template::from_string(s).unwrap();
                     self.templates.insert(template.type_name.clone(), template);
                 }
                 "templates_from_file" => {
-                    let filename = try!(p.data.as_string());
+                    let filename = try!(p.data.translate::<&str>());
                     let path = self.root_path.join(Path::new(filename));
                     self.load_templates_from_file(&path);
                 }

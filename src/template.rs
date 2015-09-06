@@ -82,7 +82,7 @@ impl Template {
         for &(ref k, ref v) in &self.properties {
             if let Ok(has) = system.has_property(entity_id, &k.as_str()) {
                 if !has {
-                    system.set_property(entity_id, k.clone(), v.clone());
+                    system.set_property(entity_id, k, v.clone());
                 }
             }
         }

@@ -60,18 +60,18 @@ impl TemplateSubSystem {
             }
         }
     }
-    fn load_templates(&mut self, node: &Pon) -> Result<(), PonTranslateErr> {
-        let templates = try!(node.translate::<&Vec<Pon>>());
+    fn load_templates(&mut self, node: &Pon, context: &mut TranslateContext) -> Result<(), PonTranslateErr> {
+        let templates = try!(node.translate::<&Vec<Pon>>(context));
         for pn in templates {
-            let p = try!(pn.translate::<&TypedPon>());
+            let p = try!(pn.translate::<&TypedPon>(context));
             match p.type_name.as_str() {
                 "template" => {
-                    let s = try!(p.data.translate::<&str>());
+                    let s = try!(p.data.translate::<&str>(context));
                     let template = Template::from_string(s).unwrap();
                     self.templates.insert(template.type_name.clone(), template);
                 }
                 "templates_from_file" => {
-                    let filename = try!(p.data.translate::<&str>());
+                    let filename = try!(p.data.translate::<&str>(context));
                     let path = self.root_path.join(Path::new(filename));
                     self.load_templates_from_file(&path);
                 }
@@ -88,7 +88,7 @@ impl ISubSystem for TemplateSubSystem {
         let root = system.document().get_root().unwrap().clone();
         match system.document().get_property_value(&root, "templates") {
             Ok(templates) => {
-                self.load_templates(&templates);
+                self.load_templates(&templates, &mut TranslateContext::from_doc(system.document_mut()));
             },
             _ => {}
         }

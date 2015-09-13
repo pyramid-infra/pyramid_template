@@ -73,22 +73,22 @@ impl Template {
         }
         None
     }
-    pub fn apply(&self, templates: &HashMap<String, Template>, system: &mut ISystem, entity_id: &EntityId) {
+    pub fn apply(&self, templates: &HashMap<String, Template>, document: &mut Document, entity_id: &EntityId) {
         if let &Some(ref inherits) = &self.inherits {
             if let Some(inherits_template) = templates.get(inherits) {
-                inherits_template.apply(templates, system, entity_id);
+                inherits_template.apply(templates, document, entity_id);
             }
         }
         for &(ref k, ref v) in &self.properties {
-            if let Ok(has) = system.has_property(entity_id, &k.as_str()) {
+            if let Ok(has) = document.has_property(entity_id, &k.as_str()) {
                 if !has {
-                    system.set_property(entity_id, k, v.clone());
+                    document.set_property(entity_id, k, v.clone());
                 }
             }
         }
         for ref template in &self.children {
-            let e = system.append_entity(entity_id, template.type_name.clone(), None).unwrap();
-            template.apply(templates, system, &e);
+            let e = document.append_entity(Some(*entity_id), &template.type_name, None).unwrap();
+            template.apply(templates, document, &e);
         }
     }
 }
@@ -116,27 +116,23 @@ fn test_template_from_string() {
 fn test_template_apply() {
     let str = r#"<Stone x="5"><Candle /></Stone>"#;
     let template = Template::from_string(str).unwrap();
-    let doc = Document::from_string(r#"<Stone name="tmp" />"#);
+    let mut doc = Document::from_string(r#"<Stone name="tmp" />"#).unwrap();
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
-    let mut system = pyramid::system::System::new();
-    system.set_document(doc);
-    template.apply(&HashMap::new(), &mut system, &ent);
+    template.apply(&HashMap::new(), &mut doc, &ent);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
-    assert_eq!(system.get_children(&ent).unwrap().len(), 1);
+    assert_eq!(doc.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(doc.get_children(&ent).unwrap().len(), 1);
 }
 
 #[test]
 fn test_template_apply_dont_overwrite() {
     let str = r#"<Stone x="5" />"#;
     let template = Template::from_string(str).unwrap();
-    let doc = Document::from_string(r#"<Stone x="7" name="tmp" />"#);
+    let mut doc = Document::from_string(r#"<Stone x="7" name="tmp" />"#).unwrap();
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
-    let mut system = pyramid::system::System::new();
-    system.set_document(doc);
-    template.apply(&HashMap::new(), &mut system, &ent);
+    template.apply(&HashMap::new(), &mut doc, &ent);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(7)));
+    assert_eq!(doc.get_property_value(&ent, "x"), Ok(Pon::Integer(7)));
 }

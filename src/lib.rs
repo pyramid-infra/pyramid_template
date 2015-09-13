@@ -15,6 +15,7 @@ use std::io::BufReader;
 use pyramid::interface::*;
 use pyramid::pon::*;
 use pyramid::document::*;
+use pyramid::system::*;
 
 use xml::reader::EventReader;
 use xml::reader::Events;
@@ -83,25 +84,25 @@ impl TemplateSubSystem {
 
 
 impl ISubSystem for TemplateSubSystem {
-    fn on_document_loaded(&mut self, system: &mut ISystem) {
-        let root = system.get_root().clone();
-        match system.get_property_value(&root, "templates") {
+    fn on_document_loaded(&mut self, system: &mut System) {
+        let root = system.document().get_root().unwrap().clone();
+        match system.document().get_property_value(&root, "templates") {
             Ok(templates) => {
                 self.load_templates(&templates);
             },
             _ => {}
         }
-        let entities: Vec<EntityId> = { system.get_entities().map(|x| x.clone()).collect() };
+        let entities: Vec<EntityId> = { system.document().entities_iter().map(|x| x.clone()).collect() };
         for entity in entities {
             self.on_entity_added(system, &entity);
         }
         println!("TEMPLATES {:?}", self.templates);
     }
-    fn on_entity_added(&mut self, system: &mut ISystem, entity_id: &EntityId) {
-        let type_name = system.get_entity_type_name(entity_id).unwrap().clone();
+    fn on_entity_added(&mut self, system: &mut System, entity_id: &EntityId) {
+        let type_name = system.document().get_entity_type_name(entity_id).unwrap().clone();
         match self.templates.get(&type_name) {
             Some(template) => {
-                template.apply(&self.templates, system, entity_id);
+                template.apply(&self.templates, system.document_mut(), entity_id);
             },
             None => {}
         }
@@ -112,14 +113,14 @@ impl ISubSystem for TemplateSubSystem {
 fn test_template() {
     let template = r#"<Rock x="5"/>"#;
     let doc_src = format!(r#"<Root templates="[template '{}']"><Rock name="tmp" /></Root>"#, xml::escape::escape_str(template));
-    let doc = Document::from_string(doc_src.as_str());
+    let doc = Document::from_string(doc_src.as_str()).unwrap();
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
     let mut system = pyramid::system::System::new();
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(system.document().get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
 }
 
 #[test]
@@ -127,13 +128,13 @@ fn test_template_inherits() {
     let template1 = r#"<Rock x="5"/>"#;
     let template2 = r#"<Granit inherits="Rock" y="2"/>"#;
     let doc_src = format!(r#"<Root templates="[template '{}', template '{}']"><Granit name="tmp" /></Root>"#, xml::escape::escape_str(template1), xml::escape::escape_str(template2));
-    let doc = Document::from_string(doc_src.as_str());
+    let doc = Document::from_string(doc_src.as_str()).unwrap();
     let ent = doc.get_entity_by_name("tmp").unwrap();
 
     let mut system = pyramid::system::System::new();
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
-    assert_eq!(system.get_property_value(&ent, "y"), Ok(Pon::Integer(2)));
+    assert_eq!(system.document().get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(system.document().get_property_value(&ent, "y"), Ok(Pon::Integer(2)));
 }

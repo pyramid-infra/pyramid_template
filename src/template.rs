@@ -121,7 +121,7 @@ fn test_template_apply() {
 
     template.apply(&HashMap::new(), &mut doc, &ent);
 
-    assert_eq!(doc.get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(doc.get_property(&ent, "x").unwrap().concretize(), Ok(Pon::Integer(5)));
     assert_eq!(doc.get_children(&ent).unwrap().len(), 1);
 }
 
@@ -134,5 +134,5 @@ fn test_template_apply_dont_overwrite() {
 
     template.apply(&HashMap::new(), &mut doc, &ent);
 
-    assert_eq!(doc.get_property_value(&ent, "x"), Ok(Pon::Integer(7)));
+    assert_eq!(doc.get_property(&ent, "x").unwrap().concretize(), Ok(Pon::Integer(7)));
 }

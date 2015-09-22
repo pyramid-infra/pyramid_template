@@ -61,36 +61,42 @@ impl TemplateSubSystem {
         }
     }
     fn load_templates(&mut self, node: &Pon, context: &mut TranslateContext) -> Result<(), PonTranslateErr> {
-        let templates = try!(node.translate::<&Vec<Pon>>(context));
-        for pn in templates {
-            let p = try!(pn.translate::<&TypedPon>(context));
-            match p.type_name.as_str() {
-                "template" => {
-                    let s = try!(p.data.translate::<&str>(context));
-                    let template = Template::from_string(s).unwrap();
-                    self.templates.insert(template.type_name.clone(), template);
-                }
-                "templates_from_file" => {
-                    let filename = try!(p.data.translate::<&str>(context));
-                    let path = self.root_path.join(Path::new(filename));
-                    self.load_templates_from_file(&path);
-                }
-                _ => return Err(PonTranslateErr::UnrecognizedType(p.type_name.clone()))
+        node.as_array(|templates| {
+            for pn in templates {
+                try!(pn.as_typed(|p| {
+                    match p.type_name.as_str() {
+                        "template" => {
+                            let s = try!(p.data.translate::<String>(context));
+                            let template = Template::from_string(&s).unwrap();
+                            self.templates.insert(template.type_name.clone(), template);
+                        }
+                        "templates_from_file" => {
+                            let filename = try!(p.data.translate::<String>(context));
+                            let path = self.root_path.join(Path::new(&filename));
+                            self.load_templates_from_file(&path);
+                        }
+                        _ => return Err(PonTranslateErr::UnrecognizedType(p.type_name.clone()))
+                    }
+                    Ok(())
+                }))
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
 
 impl ISubSystem for TemplateSubSystem {
     fn on_document_loaded(&mut self, system: &mut System) {
-        let root = system.document().get_root().unwrap().clone();
-        match system.document().get_property_value(&root, "templates") {
-            Ok(templates) => {
-                self.load_templates(&templates, &mut TranslateContext::from_doc(system.document_mut()));
-            },
-            _ => {}
+        {
+            let doc = system.document_mut();
+            let root = doc.get_root().unwrap().clone();
+            match doc.get_property(&root, "templates") {
+                Ok(templates) => {
+                    self.load_templates(&templates, &mut TranslateContext::empty());
+                },
+                _ => {}
+            }
         }
         let entities: Vec<EntityId> = { system.document().entities_iter().map(|x| x.clone()).collect() };
         for entity in entities {
@@ -120,7 +126,7 @@ fn test_template() {
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.document().get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
+    assert_eq!(system.document().get_property(&ent, "x").unwrap().concretize(), Ok(Pon::Integer(5)));
 }
 
 #[test]
@@ -135,6 +141,6 @@ fn test_template_inherits() {
     system.add_subsystem(Box::new(TemplateSubSystem::new(PathBuf::new())));
     system.set_document(doc);
 
-    assert_eq!(system.document().get_property_value(&ent, "x"), Ok(Pon::Integer(5)));
-    assert_eq!(system.document().get_property_value(&ent, "y"), Ok(Pon::Integer(2)));
+    assert_eq!(system.document().get_property(&ent, "x").unwrap().concretize(), Ok(Pon::Integer(5)));
+    assert_eq!(system.document().get_property(&ent, "y").unwrap().concretize(), Ok(Pon::Integer(2)));
 }
